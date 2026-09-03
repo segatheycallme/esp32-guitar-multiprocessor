@@ -1,0 +1,9 @@
+[package]
+name = "dsp-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jack = "0.13.5"
+serde = "1.0.229"
+serde_json = "1.0.151"
