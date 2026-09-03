@@ -9,6 +9,7 @@ use std::{
 };
 
 use jack::{AudioIn, AudioOut, Client, ClientOptions, Control, ProcessHandler, ProcessScope};
+use rouille::Response;
 
 trait Fx: Send + std::fmt::Debug {
     fn process_one(&mut self, x: f32) -> f32;
@@ -334,7 +335,7 @@ impl Fx for Gate {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Dsp {
     fx: Vec<Box<dyn Fx>>,
 }
@@ -422,10 +423,7 @@ impl ProcessHandler for Handler {
     }
 }
 
-fn read_dsp(path: &Path, sample_rate: f32) -> Dsp {
-    let mut file = File::open(path).unwrap();
-    let mut buf = String::new();
-    file.read_to_string(&mut buf).unwrap();
+fn parse_dsp(buf: String, sample_rate: f32) -> Dsp {
     let obj: serde_json::Value = serde_json::from_str(&buf).unwrap();
 
     let mut fx: Vec<Box<dyn Fx>> = vec![];
@@ -483,7 +481,16 @@ fn main() {
 
     let sample_rate = client.sample_rate() as f32;
 
-    let dsp = Arc::new(Mutex::new(read_dsp(Path::new("plugin.json"), sample_rate)));
+    let mut buf = String::new();
+    let myb_file = File::open("plugin.json");
+    let dsp = if let Ok(mut file) = myb_file {
+        file.read_to_string(&mut buf).unwrap();
+        parse_dsp(buf, sample_rate)
+    } else {
+        Default::default()
+    };
+
+    let dsp = Arc::new(Mutex::new(dsp));
 
     let input = client.register_port("input", AudioIn::default()).unwrap();
 
@@ -495,15 +502,14 @@ fn main() {
         dsp: dsp.clone(),
     };
 
-    let active_client = client.activate_async((), handler).unwrap();
+    let _active_client = Some(client.activate_async((), handler).unwrap());
 
     println!("entering main loop");
-    let mut buf = String::new();
-    while buf.trim() != "stop" {
-        io::stdin().read_line(&mut buf).unwrap();
-        let mut dsp = dsp.lock().unwrap();
-        dsp.fx = dbg!(read_dsp(Path::new("plugin.json"), sample_rate).fx);
-        println!("parsed!");
-    }
-    active_client.deactivate().unwrap();
+    rouille::start_server("0.0.0.0:3000", move |req| {
+        let mut buf = String::new();
+        req.data().unwrap().read_to_string(&mut buf).unwrap();
+        dsp.lock().unwrap().fx = parse_dsp(buf, sample_rate).fx;
+        dbg!(&dsp);
+        Response::empty_204().with_status_code(200)
+    });
 }
