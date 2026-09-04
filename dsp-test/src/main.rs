@@ -510,6 +510,6 @@ fn main() {
         req.data().unwrap().read_to_string(&mut buf).unwrap();
         dsp.lock().unwrap().fx = parse_dsp(buf, sample_rate).fx;
         dbg!(&dsp);
-        Response::empty_204().with_status_code(200)
+        Response::text("success")
     });
 }
