@@ -1,8 +1,10 @@
 mod fx;
 
 use std::{
+    env,
     fs::File,
     io::Read,
+    ops::DerefMut,
     sync::{Arc, Mutex},
 };
 
@@ -35,52 +37,6 @@ impl Dsp {
         }
     }
 }
-
-// fn wav() {
-//     let mut eq = EQ::new(10, 44100.0);
-//     eq.set_gain(5, 0.0);
-//
-//     // let delay = SineModulatedDelay::new((7.0 * 44.1) as usize, 0.45, 1.0, -0.999, 44100.0 / 1.8);
-//     // let delay = Delay::new((1.0 * 44.1) as usize, 0.5, 0.0);
-//     // delay.set_delay(8820);
-//     // delay.set_delay(4410);
-//     let gate = Gate::new(0.2 * 44.1, 10.0 * 44.1, 0.02);
-//
-//     let mut dsp = Dsp {
-//         fx: vec![
-//             // Box::new(ClippingGain::new(50.0)),
-//             // Box::new(dbg!(eq)),
-//             // Box::new(dbg!(ArctanWaveShape::new(2.0))),
-//             // Box::new(dbg!(ArctanWaveShape::new(2.0))),
-//             // Box::new(dbg!(ArctanWaveShape::new(2.0))),
-//             // Box::new(dbg!(ArctanWaveShape::new(2.0))),
-//             // Box::new(dbg!(delay)),
-//             Box::new(dbg!(gate)),
-//             Box::new(ClippingGain::new(32767.0)),
-//         ],
-//     };
-//
-//     let mut reader = hound::WavReader::open("in.wav").unwrap();
-//     let left: Vec<_> = reader
-//         .samples::<i16>()
-//         .map(|x| x.unwrap())
-//         .map(|x| (x as f32) / (i16::MAX as f32))
-//         .collect();
-//
-//     let spec = hound::WavSpec {
-//         channels: 1,
-//         sample_rate: 44100,
-//         bits_per_sample: 16,
-//         sample_format: hound::SampleFormat::Int,
-//     };
-//     let mut writer = hound::WavWriter::create("out.wav", spec).unwrap();
-//     for sample in dsp.process_vec(left) {
-//         writer
-//             .write_sample((sample * (i16::MAX as f32)) as i16)
-//             .unwrap();
-//     }
-//     writer.finalize().unwrap();
-// }
 
 struct Handler {
     input: jack::Port<AudioIn>,
@@ -154,40 +110,72 @@ fn parse_dsp(buf: String, sample_rate: f32) -> Dsp {
     dbg!(Dsp { fx })
 }
 
+fn wav(dsp: &mut Dsp) {
+    let mut reader = hound::WavReader::open("in.wav").unwrap();
+    let input: Vec<_> = reader
+        .samples::<i16>()
+        .map(|x| x.unwrap())
+        .map(|x| (x as f32) / (i16::MAX as f32))
+        .collect();
+    let mut output = input.clone();
+
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 44100,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create("out.wav", spec).unwrap();
+    dsp.process_slice(&input, &mut output);
+    for sample in output {
+        writer
+            .write_sample((sample * (i16::MAX as f32)) as i16)
+            .unwrap();
+    }
+    writer.finalize().unwrap();
+}
+
 fn main() {
+    let arg1 = env::args().nth(1);
+    let mode = arg1.is_some();
+    let wav_file = arg1.unwrap_or("plugin.json".to_string());
+
     let (client, _status) = Client::new("rust-loopback", ClientOptions::NO_START_SERVER).unwrap();
 
     let sample_rate = client.sample_rate() as f32;
 
-    let mut buf = String::new();
-    let myb_file = File::open("plugin.json");
-    let dsp = if let Ok(mut file) = myb_file {
-        file.read_to_string(&mut buf).unwrap();
-        parse_dsp(buf, sample_rate)
-    } else {
-        Default::default()
-    };
-
-    let dsp = Arc::new(Mutex::new(dsp));
-
-    let input = client.register_port("input", AudioIn::default()).unwrap();
-
-    let output = client.register_port("output", AudioOut::default()).unwrap();
-
-    let handler = Handler {
-        input,
-        output,
-        dsp: dsp.clone(),
-    };
-
-    let _active_client = Some(client.activate_async((), handler).unwrap());
-
-    println!("entering main loop");
-    rouille::start_server("0.0.0.0:3000", move |req| {
+    if mode {
         let mut buf = String::new();
-        req.data().unwrap().read_to_string(&mut buf).unwrap();
-        dsp.lock().unwrap().fx = parse_dsp(buf, sample_rate).fx;
-        dbg!(&dsp);
-        Response::text("success")
-    });
+        let myb_file = File::open(wav_file);
+        let dsp = if let Ok(mut file) = myb_file {
+            file.read_to_string(&mut buf).unwrap();
+            parse_dsp(buf, sample_rate)
+        } else {
+            Default::default()
+        };
+
+        let dsp = Arc::new(Mutex::new(dsp));
+
+        wav(dsp.lock().unwrap().deref_mut());
+    } else {
+        let dsp = Arc::new(Mutex::new(Dsp::default()));
+
+        let input = client.register_port("input", AudioIn::default()).unwrap();
+        let output = client.register_port("output", AudioOut::default()).unwrap();
+        let handler = Handler {
+            input,
+            output,
+            dsp: dsp.clone(),
+        };
+        let _active_client = Some(client.activate_async((), handler).unwrap());
+
+        println!("entering main loop");
+        rouille::start_server("0.0.0.0:3000", move |req| {
+            let mut buf = String::new();
+            req.data().unwrap().read_to_string(&mut buf).unwrap();
+            dsp.lock().unwrap().fx = parse_dsp(buf, sample_rate).fx;
+            dbg!(&dsp);
+            Response::text("success")
+        });
+    }
 }
