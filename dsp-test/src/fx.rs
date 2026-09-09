@@ -350,15 +350,24 @@ pub struct Dynamics {
     threshold: f32,
     ratio: f32,
     knee: f32,
+    gain: f32,
     detector: EnvelopeDetector,
 }
 
 impl Dynamics {
-    pub fn new(attack: f32, release: f32, threshold: f32, ratio: f32, knee: f32) -> Self {
+    pub fn new(
+        attack: f32,
+        release: f32,
+        threshold: f32,
+        ratio: f32,
+        knee: f32,
+        gain: f32,
+    ) -> Self {
         Dynamics {
             threshold,
             ratio,
             knee,
+            gain,
             detector: EnvelopeDetector::new(attack, release),
         }
     }
@@ -366,11 +375,12 @@ impl Dynamics {
 
 impl Fx for Dynamics {
     fn process_one(&mut self, x: f32) -> f32 {
+        let x = x * self.gain;
         let d = (self.detector.process_one(x)).log10() * 20.0;
         let mut cs = 1.0 - self.ratio.recip();
         let lower = self.threshold - self.knee * 0.5;
         if self.knee > 0.0 && d > lower && d < lower + self.knee {
-            cs = (d - self.threshold + self.knee * 0.5) / self.knee * cs;
+            cs *= (d - self.threshold + self.knee * 0.5) / self.knee;
         }
 
         let yg = if d > lower {
@@ -378,6 +388,6 @@ impl Fx for Dynamics {
         } else {
             0.0
         };
-        (yg / 20.0).powi(10)
+        10f32.powf(yg / 20.0) * x
     }
 }

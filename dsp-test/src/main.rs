@@ -11,7 +11,7 @@ use std::{
 use jack::{AudioIn, AudioOut, Client, ClientOptions, Control, ProcessHandler, ProcessScope};
 use rouille::Response;
 
-use crate::fx::{ArctanWaveShape, ClippingGain, Delay, EQ, Gate, SineModulatedDelay};
+use crate::fx::{ArctanWaveShape, ClippingGain, Delay, Dynamics, EQ, Gate, SineModulatedDelay};
 use crate::fx::{DCOffset, Fx};
 
 #[derive(Debug, Default)]
@@ -92,6 +92,14 @@ fn parse_dsp(buf: String, sample_rate: f32) -> Dsp {
                 fx_arg[0] * sample_rate / 1000.0,
                 fx_arg[1] * sample_rate / 1000.0,
                 fx_arg[2],
+            )),
+            "Dynamics" => Box::new(Dynamics::new(
+                fx_arg[0] * sample_rate / 1000.0,
+                fx_arg[1] * sample_rate / 1000.0,
+                fx_arg[2],
+                fx_arg[3],
+                fx_arg[4],
+                fx_arg[5],
             )),
             "EQ" => {
                 let mut eq = EQ::new(fx_arg[0] as usize, sample_rate);
