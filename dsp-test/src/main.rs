@@ -100,6 +100,7 @@ fn parse_dsp(buf: String, sample_rate: f32) -> Dsp {
                 fx_arg[3],
                 fx_arg[4],
                 fx_arg[5],
+                fx_arg[6] != 0.0,
             )),
             "EQ" => {
                 let mut eq = EQ::new(fx_arg[0] as usize, sample_rate);

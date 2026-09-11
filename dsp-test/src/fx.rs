@@ -351,6 +351,7 @@ pub struct Dynamics {
     ratio: f32,
     knee: f32,
     gain: f32,
+    expander: bool,
     detector: EnvelopeDetector,
 }
 
@@ -362,32 +363,47 @@ impl Dynamics {
         ratio: f32,
         knee: f32,
         gain: f32,
+        expander: bool,
     ) -> Self {
         Dynamics {
             threshold,
             ratio,
             knee,
             gain,
+            expander,
             detector: EnvelopeDetector::new(attack, release),
         }
     }
 }
 
+// TODO: add delay
 impl Fx for Dynamics {
     fn process_one(&mut self, x: f32) -> f32 {
         let x = x * self.gain;
-        let d = (self.detector.process_one(x)).log10() * 20.0;
-        let mut cs = 1.0 - self.ratio.recip();
-        let lower = self.threshold - self.knee * 0.5;
-        if self.knee > 0.0 && d > lower && d < lower + self.knee {
-            cs *= (d - self.threshold + self.knee * 0.5) / self.knee;
-        }
 
-        let yg = if d > lower {
-            cs * (self.threshold - d)
+        let det = (self.detector.process_one(x)).log10() * 20.0;
+        let d = det - self.threshold;
+
+        #[allow(clippy::collapsible_else_if)]
+        let y = if self.expander {
+            if d < self.knee / -2.0 {
+                self.threshold + d * self.ratio
+            } else if d.abs() <= self.knee / 2.0 {
+                det + (1.0 - self.ratio) * (d - self.knee / 2.0).powi(2) / (2.0 * self.knee)
+            } else {
+                det
+            }
         } else {
-            0.0
+            if d < self.knee / -2.0 {
+                det
+            } else if d.abs() <= self.knee / 2.0 {
+                det + (self.ratio.recip() - 1.0) * (d + self.knee / 2.0).powi(2) / (2.0 * self.knee)
+            } else {
+                self.threshold + d / self.ratio
+            }
         };
+
+        let yg = y - det;
         10f32.powf(yg / 20.0) * x
     }
 }
