@@ -353,6 +353,7 @@ pub struct Dynamics {
     gain: f32,
     expander: bool,
     detector: EnvelopeDetector,
+    delay: Delay,
 }
 
 impl Dynamics {
@@ -363,6 +364,7 @@ impl Dynamics {
         ratio: f32,
         knee: f32,
         gain: f32,
+        delay: usize,
         expander: bool,
     ) -> Self {
         Dynamics {
@@ -371,6 +373,7 @@ impl Dynamics {
             knee,
             gain,
             expander,
+            delay: Delay::new(delay, 1.0, 0.0),
             detector: EnvelopeDetector::new(attack, release),
         }
     }
@@ -404,6 +407,6 @@ impl Fx for Dynamics {
         };
 
         let yg = y - det;
-        10f32.powf(yg / 20.0) * x
+        10f32.powf(yg / 20.0) * self.delay.process_one(x)
     }
 }
