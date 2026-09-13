@@ -21,7 +21,7 @@ impl Fx for ClippingGain {
 }
 
 #[derive(Debug, Clone)]
-struct PeakingConstantQBuilder {
+pub struct PeakingConstantQBuilder {
     frequency: f32,
     sample_rate: f32,
     quality: f32,
@@ -38,7 +38,7 @@ impl PeakingConstantQBuilder {
         }
     }
 
-    fn build(&self) -> BiQuad {
+    pub fn build(&self) -> BiQuad {
         let q = self.quality;
         let k = (PI * self.frequency / self.sample_rate).tan();
         let v0 = 10f32.powf(self.gain / 20.0);
@@ -74,7 +74,7 @@ impl PeakingConstantQBuilder {
 }
 
 #[derive(Debug, Default)]
-struct BiQuad {
+pub struct BiQuad {
     a0: f32,
     a1: f32,
     a2: f32,
@@ -357,6 +357,7 @@ pub struct Dynamics {
 }
 
 impl Dynamics {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         attack: f32,
         release: f32,
