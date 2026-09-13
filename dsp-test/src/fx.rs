@@ -412,3 +412,120 @@ impl Fx for Dynamics {
         if y.is_nan() { 0.0 } else { y }
     }
 }
+
+#[derive(Debug, Default)]
+pub struct TrapezoidalSVH {
+    v0z: f32,
+    v1: f32,
+    v2: f32,
+    g1: f32,
+    g2: f32,
+    g3: f32,
+    g4: f32,
+}
+
+impl TrapezoidalSVH {
+    pub fn new(freq: f32, q: f32) -> Self {
+        let mut svh = TrapezoidalSVH {
+            ..Default::default()
+        };
+        svh.set(freq, q);
+        svh
+    }
+    pub fn set(&mut self, freq: f32, q: f32) {
+        let g = (PI * freq).tan();
+        let k = 1.0 / q;
+        let ginv = g / (1.0 + g * (g + k));
+        self.g1 = ginv;
+        self.g2 = 2.0 * (g + k) * ginv;
+        self.g3 = g * ginv;
+        self.g4 = 2.0 * ginv;
+    }
+}
+
+impl Fx for TrapezoidalSVH {
+    fn process_one(&mut self, x: f32) -> f32 {
+        let v0 = x;
+        let v1z = self.v1;
+        let v2z = self.v2;
+
+        let v3 = v0 + self.v0z - 2.0 * v2z;
+        self.v1 += self.g1 * v3 - self.g2 * v1z;
+        self.v2 += self.g3 * v3 + self.g4 * v1z;
+
+        self.v0z = v0;
+
+        self.v1
+    }
+}
+
+#[derive(Debug)]
+pub struct SineModulatedWah {
+    mod_freq: f32,
+    base_freq: f32,
+    depth: f32,
+    state: f32,
+    q: f32,
+    band_pass: TrapezoidalSVH,
+}
+
+impl SineModulatedWah {
+    pub fn new(mod_freq: f32, base_freq: f32, depth: f32, q: f32) -> Self {
+        SineModulatedWah {
+            mod_freq,
+            base_freq,
+            depth,
+            state: 0.0,
+            q,
+            band_pass: TrapezoidalSVH::new(base_freq, q),
+        }
+    }
+}
+
+impl Fx for SineModulatedWah {
+    fn process_one(&mut self, x: f32) -> f32 {
+        self.band_pass.set(
+            self.base_freq + self.base_freq * (self.state.sin() * self.depth),
+            self.q,
+        );
+        self.state = (self.state + self.mod_freq * 2.0 * PI) % (2.0 * PI);
+
+        self.band_pass.process_one(x)
+    }
+}
+
+#[derive(Debug)]
+pub struct EnvelopeWah {
+    min_freq: f32,
+    max_freq: f32,
+    q: f32,
+    band_pass: TrapezoidalSVH,
+    envelope_detector: EnvelopeDetector,
+    gain: f32,
+}
+
+impl EnvelopeWah {
+    pub fn new(min_freq: f32, max_freq: f32, q: f32, attack: f32, release: f32, gain: f32) -> Self {
+        EnvelopeWah {
+            min_freq,
+            max_freq,
+            q,
+            gain,
+            band_pass: TrapezoidalSVH::new(min_freq, q),
+            envelope_detector: EnvelopeDetector::new(attack, release),
+        }
+    }
+}
+
+impl Fx for EnvelopeWah {
+    fn process_one(&mut self, x: f32) -> f32 {
+        let db = ((self.envelope_detector.process_one(x * self.gain)).log10() * 20.00).max(-20.0);
+        dbg!(db);
+
+        let freq = (self.max_freq - self.min_freq) * (1.0 - db / -20.0) + self.min_freq;
+
+        self.band_pass.set(freq, self.q);
+
+        self.band_pass.process_one(x)
+    }
+}

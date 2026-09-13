@@ -12,8 +12,8 @@ use jack::{AudioIn, AudioOut, Client, ClientOptions, Control, ProcessHandler, Pr
 use rouille::Response;
 
 use crate::fx::{
-    ArctanWaveShape, ClippingGain, Delay, Dynamics, EQ, Gate, PeakingConstantQBuilder,
-    SineModulatedDelay,
+    ArctanWaveShape, ClippingGain, Delay, Dynamics, EQ, EnvelopeWah, Gate, PeakingConstantQBuilder,
+    SineModulatedDelay, SineModulatedWah, TrapezoidalSVH,
 };
 use crate::fx::{DCOffset, Fx};
 
@@ -119,6 +119,20 @@ fn parse_dsp(buf: String, sample_rate: f32) -> Dsp {
             "PeakingConstantQ" => Box::new(
                 PeakingConstantQBuilder::new(fx_arg[0], sample_rate, fx_arg[1], fx_arg[2]).build(),
             ),
+            "SineWah" => Box::new(SineModulatedWah::new(
+                fx_arg[0] / sample_rate,
+                fx_arg[1] / sample_rate,
+                fx_arg[2],
+                fx_arg[3],
+            )),
+            "EnvelopeWah" => Box::new(EnvelopeWah::new(
+                fx_arg[0] / sample_rate,
+                fx_arg[1] / sample_rate,
+                fx_arg[2],
+                fx_arg[3] * sample_rate / 1000.0,
+                fx_arg[4] * sample_rate / 1000.0,
+                fx_arg[5],
+            )),
             _ => panic!("unknown_type"),
         });
     }
