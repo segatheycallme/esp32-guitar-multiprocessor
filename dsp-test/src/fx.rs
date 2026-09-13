@@ -207,8 +207,8 @@ impl Fx for Delay {
     fn process_one(&mut self, x: f32) -> f32 {
         let y = x * (1.0 - self.mix)
             + self.mix
-                * (self.xddl.get(self.delay - 1).unwrap_or(&0.0)
-                    + self.fb * self.yddl.get(self.delay - 1).unwrap_or(&0f32));
+                * (self.xddl.get(self.delay.saturating_sub(1)).unwrap_or(&0.0)
+                    + self.fb * self.yddl.get(self.delay.saturating_sub(1)).unwrap_or(&0f32));
         if self.xddl.len() == self.xddl.capacity() {
             self.xddl.pop_back();
         }
@@ -408,6 +408,7 @@ impl Fx for Dynamics {
         };
 
         let yg = y - det;
-        10f32.powf(yg / 20.0) * self.delay.process_one(x)
+        let y = 10f32.powf(yg / 20.0) * self.delay.process_one(x);
+        if y.is_nan() { 0.0 } else { y }
     }
 }
