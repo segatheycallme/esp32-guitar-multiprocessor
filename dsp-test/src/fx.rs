@@ -520,7 +520,6 @@ impl EnvelopeWah {
 impl Fx for EnvelopeWah {
     fn process_one(&mut self, x: f32) -> f32 {
         let db = ((self.envelope_detector.process_one(x * self.gain)).log10() * 20.00).max(-20.0);
-        dbg!(db);
 
         let freq = (self.max_freq - self.min_freq) * (1.0 - db / -20.0) + self.min_freq;
 
