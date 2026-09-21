@@ -11,11 +11,10 @@ use es8311::{ClockConfig, Es8311};
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::i2c::master::I2c;
-use esp_hal::i2s::master::{Channels, I2s};
-use esp_hal::peripherals::GPIO9;
+use esp_hal::i2s::master::{Channels, I2s, TdmConfig};
 use esp_hal::time::Rate;
-use esp_hal::{dma_buffers, i2c, i2s, main};
-use log::{error, info};
+use esp_hal::{dma_rx_stream_buffer, i2c, i2s, main};
+use log::{error, info, warn};
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -91,37 +90,48 @@ fn main() -> ! {
         )
         .unwrap();
 
-    codec.volume_set(&mut i2c, 100, None).unwrap();
-
-    let (mut rx_buffer, rx_descriptors, _, _) = dma_buffers!(4 * 64, 0);
-    let (mut tx_buffer, tx_descriptors, _, _) = dma_buffers!(4 * 64, 0);
+    codec
+        .set_power_mode(&mut i2c, es8311::PowerMode::Normal)
+        .unwrap();
+    codec
+        .microphone_gain_set(&mut i2c, es8311::MicGain::Max)
+        .unwrap();
+    codec.microphone_config(&mut i2c, true).unwrap();
 
     let i2s = I2s::new(
         peripherals.I2S0,
         peripherals.DMA_CH0,
-        i2s::master::Config::new_tdm_philips()
+        TdmConfig::new_tdm_philips()
             .with_sample_rate(Rate::from_hz(48_000))
             .with_data_format(i2s::master::DataFormat::Data16Channel16)
-            .with_channels(Channels::MONO),
+            .with_channels(Channels::MONO), // .with_signal_loopback(true),
     )
     .unwrap()
     .with_mclk(peripherals.GPIO11);
 
-    let mut i2s_rx = i2s
+    let i2s_rx = i2s
         .i2s_rx
         .with_bclk(peripherals.GPIO10)
         .with_ws(peripherals.GPIO3)
-        .with_din(peripherals.GPIO8)
-        .build(rx_descriptors);
-    let mut i2s_tx = i2s
-        .i2s_tx
-        .with_dout(peripherals.GPIO9)
-        .build(tx_descriptors);
+        .with_din(peripherals.GPIO16)
+        .build();
 
-    esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+    let rx_buffer = dma_rx_stream_buffer!(16 * 1024, 512);
+    // let mut i2s_rx = i2s.i2s_rx.with_din(peripherals.GPIO8).build(rx_descriptors);
 
-    let delay = Delay::new();
-    loop {}
+    esp_alloc::heap_allocator!(size: 64000);
+
+    let mut rcv = [0u8; 2048];
+    // let delay = Delay::new();
+    let mut transfer = i2s_rx.read(rx_buffer).unwrap();
+    loop {
+        let avail = transfer.available_bytes();
+        if avail > 0 {
+            transfer.pop(&mut rcv[..avail]);
+            warn!("avail={}", avail);
+            info!("{:?}", &rcv[215..235]);
+        }
+    }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.1.0/examples
 }
