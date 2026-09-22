@@ -10,6 +10,7 @@
 use es8311::{ClockConfig, Es8311};
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
+use esp_hal::gpio::Flex;
 use esp_hal::i2c::master::I2c;
 use esp_hal::i2s::master::{Channels, I2s, TdmConfig};
 use esp_hal::time::Rate;
@@ -134,4 +135,110 @@ fn main() -> ! {
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.1.0/examples
+}
+
+fn segment_number(leds: &mut [Flex; 5], delay: Delay, delay_time: u32, n: u8, left: bool) {
+    let offset = if left { 0 } else { 7 };
+    match n {
+        0 => {
+            for i in [1, 2, 3, 5, 6, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        1 => {
+            for i in [3, 6] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        2 => {
+            for i in [1, 3, 4, 5, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        3 => {
+            for i in [1, 3, 4, 6, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        4 => {
+            for i in [2, 3, 4, 6] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        5 => {
+            for i in [1, 2, 4, 6, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        6 => {
+            for i in [1, 2, 4, 5, 6, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        7 => {
+            for i in [1, 3, 6] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        8 => {
+            for i in [1, 2, 3, 4, 5, 6, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        9 => {
+            for i in [1, 2, 3, 4, 6, 7] {
+                segment_control(leds, i + offset, true);
+                delay.delay_micros(delay_time);
+                segment_control(leds, i + offset, false);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn segment_control(leds: &mut [Flex; 5], seg: u8, enable: bool) {
+    let (on, off) = match seg {
+        1 => (1, 2),
+        2 => (0, 4),
+        3 => (1, 4),
+        4 => (2, 4),
+        5 => (0, 2),
+        6 => (4, 2),
+        7 => (3, 1),
+        8 => (3, 0),
+        9 => (2, 0),
+        10 => (0, 1),
+        11 => (2, 1),
+        12 => (4, 0),
+        13 => (4, 1),
+        14 => (1, 0),
+        _ => (0, 0),
+    };
+    if enable {
+        leds[on].set_high();
+        leds[off].set_low();
+        leds[on].set_output_enable(true);
+        leds[off].set_output_enable(true);
+    } else {
+        leds[on].set_output_enable(false);
+        leds[off].set_output_enable(false);
+    }
 }
