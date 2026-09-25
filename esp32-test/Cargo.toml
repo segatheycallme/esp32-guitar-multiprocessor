@@ -19,8 +19,6 @@ critical-section = "1.2.0"
 esp-alloc = "0.10.0"
 esp-println = { version = "0.17.0", features = ["esp32s3", "log-04"] }
 
-es8311 = "0.1.1"
-
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.dev]

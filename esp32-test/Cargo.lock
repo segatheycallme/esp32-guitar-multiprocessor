@@ -502,15 +502,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
-name = "es8311"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbf031db4dbb8876a09dd5506ac5df00463fa0e03b59aa42302c9c018ff1a9ac"
-dependencies = [
- "embedded-hal 1.0.0",
-]
-
-[[package]]
 name = "esp-alloc"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -754,7 +745,6 @@ name = "esp32-test"
 version = "0.1.0"
 dependencies = [
  "critical-section",
- "es8311",
  "esp-alloc",
  "esp-bootloader-esp-idf",
  "esp-hal",

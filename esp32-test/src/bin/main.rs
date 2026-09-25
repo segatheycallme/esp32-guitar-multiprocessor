@@ -7,15 +7,12 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use es8311::{ClockConfig, Es8311};
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::Flex;
 use esp_hal::i2c::master::I2c;
-use esp_hal::i2s::master::{Channels, I2s, TdmConfig};
-use esp_hal::time::Rate;
-use esp_hal::{dma_rx_stream_buffer, i2c, i2s, main};
-use log::{error, info, warn};
+use esp_hal::{i2c, main, peripherals};
+use log::error;
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -58,81 +55,39 @@ fn main() -> ! {
     let _ = peripherals.GPIO31;
     let _ = peripherals.GPIO32;
 
-    // 13 sda
-    // 12 scl
-    // 11 mck
-    // 10 bck
-    // 9 di
-    // 3 ws
-    // 8 do
+    // 4 sda
+    // 5 scl
+    // 6 bck
+    // 12 ws
+    // 13 di
+    // 14 do
 
-    let config = i2c::master::Config::default().with_frequency(Rate::from_khz(100));
-    let mut i2c = I2c::new(peripherals.I2C0, config)
+    let mut i2c = I2c::new(peripherals.I2C0, i2c::master::Config::default())
         .unwrap()
-        .with_sda(peripherals.GPIO13)
-        .with_scl(peripherals.GPIO12);
+        .with_sda(peripherals.GPIO4)
+        .with_scl(peripherals.GPIO5);
 
-    let codec = Es8311::new(0x18);
+    let addr = 0x1a;
+    i2c.write(addr, &[0x23, 0x80]).unwrap(); // master clock
+    i2c.write(addr, &[0x22, 0x0b]).unwrap(); // 48khz
+    i2c.write(addr, &[0x29, 0xe8]).unwrap(); // enable tdm dai stereo i2s
 
-    let clock_cfg = ClockConfig {
-        mclk_inverted: false,
-        sclk_inverted: false,
-        mclk_from_mclk_pin: true,
-        mclk_frequency: 12_288_000,
-        sample_frequency: 48_000,
-    };
-    codec
-        .init(
-            &mut i2c,
-            &clock_cfg,
-            es8311::Resolution::Bits16,
-            es8311::Resolution::Bits16,
-            &mut Delay::new(),
-        )
-        .unwrap();
+    i2c.write(addr, &[0x60, 0xc4]).unwrap(); // mute aux l
+    i2c.write(addr, &[0x61, 0xc4]).unwrap(); // mute aux r
+    i2c.write(addr, &[0x33, 0x01]).unwrap(); // auxl to input mixer l
+    i2c.write(addr, &[0x34, 0x01]).unwrap(); // auxr to input mixer r
+    i2c.write(addr, &[0x65, 0xa8]).unwrap(); // enable input mixer l
+    i2c.write(addr, &[0x66, 0xa8]).unwrap(); // enable input mixer r
+    i2c.write(addr, &[0x67, 0xf0]).unwrap(); // mute adc l
+    i2c.write(addr, &[0x68, 0xf0]).unwrap(); // mute adc r
 
-    codec
-        .set_power_mode(&mut i2c, es8311::PowerMode::Normal)
-        .unwrap();
-    codec
-        .microphone_gain_set(&mut i2c, es8311::MicGain::Max)
-        .unwrap();
-    codec.microphone_config(&mut i2c, true).unwrap();
-
-    let i2s = I2s::new(
-        peripherals.I2S0,
-        peripherals.DMA_CH0,
-        TdmConfig::new_tdm_philips()
-            .with_sample_rate(Rate::from_hz(48_000))
-            .with_data_format(i2s::master::DataFormat::Data16Channel16)
-            .with_channels(Channels::MONO), // .with_signal_loopback(true),
-    )
-    .unwrap()
-    .with_mclk(peripherals.GPIO11);
-
-    let i2s_rx = i2s
-        .i2s_rx
-        .with_bclk(peripherals.GPIO10)
-        .with_ws(peripherals.GPIO3)
-        .with_din(peripherals.GPIO16)
-        .build();
-
-    let rx_buffer = dma_rx_stream_buffer!(16 * 1024, 512);
-    // let mut i2s_rx = i2s.i2s_rx.with_din(peripherals.GPIO8).build(rx_descriptors);
+    i2c.write(addr, &[0x60, 0x84]).unwrap(); // unmute aux l
+    i2c.write(addr, &[0x61, 0x84]).unwrap(); // unmute aux r
+    i2c.write(addr, &[0x67, 0xa0]).unwrap(); // unmute adc l
+    i2c.write(addr, &[0x68, 0xa0]).unwrap(); // unmute adc r
 
     esp_alloc::heap_allocator!(size: 64000);
-
-    let mut rcv = [0u8; 2048];
-    // let delay = Delay::new();
-    let mut transfer = i2s_rx.read(rx_buffer).unwrap();
-    loop {
-        let avail = transfer.available_bytes();
-        if avail > 0 {
-            transfer.pop(&mut rcv[..avail]);
-            warn!("avail={}", avail);
-            info!("{:?}", &rcv[215..235]);
-        }
-    }
+    panic!()
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.1.0/examples
 }
